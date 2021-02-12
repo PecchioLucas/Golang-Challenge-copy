@@ -3,6 +3,7 @@ package sample1
 import (
 	"fmt"
 	"sort"
+	"strings"
 	"testing"
 	"time"
 )
@@ -197,7 +198,7 @@ func TestGetPricesFor_MaxParallelCalls(t *testing.T) {
 	}
 }
 
-// Check that errors ocurr and then returns the amount of them
+// Check that errors ocurr and then returns the detail of which itemCode was trying to be retrieved with its cause
 func TestGetPricesFor_ReturnsErrorOnServiceError(t *testing.T) {
 	mockService := &mockPriceService{
 		mockResults: map[string]mockResult{
@@ -212,7 +213,11 @@ func TestGetPricesFor_ReturnsErrorOnServiceError(t *testing.T) {
 	if err == nil {
 		t.Errorf("expected error, got nil")
 	}
-	if err.Error() != "2 errors ocurred" {
-		t.Errorf("unepected error message")
+	expectedErrorMessageP2 := "error ocurred while retrieving itemCode p2 with cause: getting price from service : some error"
+	expectedErrorMessageP3 := "error ocurred while retrieving itemCode p3 with cause: getting price from service : some other error"
+
+	if !strings.Contains(err.Error(), expectedErrorMessageP2) ||
+		!strings.Contains(err.Error(), expectedErrorMessageP3) {
+		t.Errorf(err.Error())
 	}
 }

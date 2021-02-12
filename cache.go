@@ -2,6 +2,7 @@ package sample1
 
 import (
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 )
@@ -106,11 +107,11 @@ func (c *TransparentCache) GetPricesFor(itemCodes ...string) ([]float64, error) 
 	}
 	waitGroup.Wait()
 
-	resultErrors := []error{}
+	resultErrors := make(map[string]error)
 	for i := 0; i < len(itemCodes); i++ {
 		result := <-resultChannel
 		if result.err != nil {
-			resultErrors = append(resultErrors, result.err)
+			resultErrors[result.itemCode] = result.err
 		}
 		if len(resultErrors) == 0 {
 			results = append(results, result.price)
@@ -118,8 +119,17 @@ func (c *TransparentCache) GetPricesFor(itemCodes ...string) ([]float64, error) 
 	}
 
 	if len(resultErrors) > 0 {
-		return []float64{}, fmt.Errorf("%d errors ocurred", len(resultErrors))
+		return []float64{}, c.formatErrors(resultErrors)
 	}
 
 	return results, nil
+}
+
+func (c *TransparentCache) formatErrors(errorsMap map[string]error) error {
+	errorMessages := []string{}
+	for itemCode, err := range errorsMap {
+		errorMessages = append(errorMessages, fmt.Sprintf("error ocurred while retrieving itemCode %s with cause: %s", itemCode, err))
+	}
+
+	return fmt.Errorf("errors: %s", strings.Join(errorMessages, "\n"))
 }
