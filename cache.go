@@ -101,5 +101,20 @@ func (c *TransparentCache) GetPricesFor(itemCodes ...string) ([]float64, error) 
 	}
 	waitGroup.Wait()
 
+	resultErrors := []error{}
+	for i := 0; i < len(itemCodes); i++ {
+		result := <-resultChannel
+		if result.err != nil {
+			resultErrors = append(resultErrors, result.err)
+		}
+		if len(resultErrors) == 0 {
+			results = append(results, result.price)
+		}
+	}
+
+	if len(resultErrors) > 0 {
+		return []float64{}, fmt.Errorf("%d errors ocurred", len(resultErrors))
+	}
+
 	return results, nil
 }
