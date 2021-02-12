@@ -170,3 +170,23 @@ func TestGetPricesFor_ParallelizeCalls(t *testing.T) {
 		t.Error("calls took too long, expected them to take a bit over one second")
 	}
 }
+
+// Check that errors ocurr and then returns the amount of them
+func TestGetPricesFor_ReturnsErrorOnServiceError(t *testing.T) {
+	mockService := &mockPriceService{
+		mockResults: map[string]mockResult{
+			"p1": {price: 5, err: nil},
+			"p2": {price: 0, err: fmt.Errorf("some error")},
+			"p3": {price: 0, err: fmt.Errorf("some other error")},
+			"p4": {price: 8, err: nil},
+		},
+	}
+	cache := NewTransparentCache(mockService, time.Minute)
+	_, err := cache.GetPricesFor("p1", "p2", "p3", "p4")
+	if err == nil {
+		t.Errorf("expected error, got nil")
+	}
+	if err.Error() != "2 errors ocurred" {
+		t.Errorf("unepected error message")
+	}
+}
