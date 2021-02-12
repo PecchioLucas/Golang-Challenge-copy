@@ -171,6 +171,32 @@ func TestGetPricesFor_ParallelizeCalls(t *testing.T) {
 	}
 }
 
+// Check that only the permitted amount of routines run in parallel (4)
+func TestGetPricesFor_MaxParallelCalls(t *testing.T) {
+	mockService := &mockPriceService{
+		callDelay: time.Second, // each call to external service takes one full second
+		mockResults: map[string]mockResult{
+			"p1": {price: 5, err: nil},
+			"p2": {price: 7, err: nil},
+			"p3": {price: 3, err: nil},
+			"p4": {price: 1, err: nil},
+			"p5": {price: 2, err: nil},
+			"p6": {price: 3, err: nil},
+			"p7": {price: 4, err: nil},
+		},
+	}
+	cache := NewTransparentCache(mockService, time.Minute)
+	start := time.Now()
+	assertFloats(t, []float64{5, 7, 3, 1, 2, 3, 4}, getPricesWithNoErr(t, cache, "p1", "p2", "p3", "p4", "p5", "p6", "p7"), "wrong price returned")
+	elapsedTime := time.Since(start)
+	if elapsedTime > (3000 * time.Millisecond) {
+		t.Error("calls took too long, expected them to take a bit over two seconds")
+	}
+	if elapsedTime < (2000 * time.Millisecond) {
+		t.Error("calls took too little time, 7 calls that lasts 1 second each should have taken at least 2 seconds with a parallelization of 4")
+	}
+}
+
 // Check that errors ocurr and then returns the amount of them
 func TestGetPricesFor_ReturnsErrorOnServiceError(t *testing.T) {
 	mockService := &mockPriceService{

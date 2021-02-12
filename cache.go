@@ -16,10 +16,11 @@ type PriceService interface {
 // The cache will remember prices we ask for, so that we don't have to wait on every call
 // Cache should only return a price if it is not older than "maxAge", so that we don't get stale prices
 type TransparentCache struct {
-	actualPriceService PriceService
-	maxAge             time.Duration
-	prices             map[string]CachedPrice
-	mutex              sync.RWMutex
+	actualPriceService  PriceService
+	maxAge              time.Duration
+	prices              map[string]CachedPrice
+	mutex               sync.RWMutex
+	maxParallelRoutines int
 }
 
 // CachedPrice is the struct thats saved in a cache and contains the price
@@ -31,10 +32,11 @@ type CachedPrice struct {
 // NewTransparentCache is the constructor for TransparentCache
 func NewTransparentCache(actualPriceService PriceService, maxAge time.Duration) *TransparentCache {
 	return &TransparentCache{
-		actualPriceService: actualPriceService,
-		maxAge:             maxAge,
-		prices:             make(map[string]CachedPrice),
-		mutex:              sync.RWMutex{},
+		actualPriceService:  actualPriceService,
+		maxAge:              maxAge,
+		prices:              make(map[string]CachedPrice),
+		mutex:               sync.RWMutex{},
+		maxParallelRoutines: 4,
 	}
 }
 
@@ -85,11 +87,13 @@ func (c *TransparentCache) GetPricesFor(itemCodes ...string) ([]float64, error) 
 	results := []float64{}
 
 	resultChannel := make(chan priceResult, len(itemCodes))
+	semaphoreChannel := make(chan struct{}, c.maxParallelRoutines)
 
 	waitGroup := sync.WaitGroup{}
 	for _, itemCode := range itemCodes {
 		waitGroup.Add(1)
-		go func(itemCode string, resultsChannel chan priceResult, waitGroup *sync.WaitGroup) {
+		semaphoreChannel <- struct{}{}
+		go func(itemCode string, resultsChannel chan priceResult, waitGroup *sync.WaitGroup, semaphoreChannel chan struct{}) {
 			price, err := c.GetPriceFor(itemCode)
 			resultsChannel <- priceResult{
 				itemCode: itemCode,
@@ -97,7 +101,8 @@ func (c *TransparentCache) GetPricesFor(itemCodes ...string) ([]float64, error) 
 				err:      err,
 			}
 			waitGroup.Done()
-		}(itemCode, resultChannel, &waitGroup)
+			<-semaphoreChannel
+		}(itemCode, resultChannel, &waitGroup, semaphoreChannel)
 	}
 	waitGroup.Wait()
 
