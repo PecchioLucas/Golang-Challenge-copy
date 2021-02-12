@@ -22,11 +22,13 @@ type TransparentCache struct {
 	mutex              sync.RWMutex
 }
 
+// CachedPrice is the struct thats saved in a cache and contains the price
 type CachedPrice struct {
 	price   float64
 	savedAt time.Time
 }
 
+// NewTransparentCache is the constructor for TransparentCache
 func NewTransparentCache(actualPriceService PriceService, maxAge time.Duration) *TransparentCache {
 	return &TransparentCache{
 		actualPriceService: actualPriceService,
@@ -76,13 +78,23 @@ func (c *TransparentCache) GetPriceFor(itemCode string) (float64, error) {
 func (c *TransparentCache) GetPricesFor(itemCodes ...string) ([]float64, error) {
 	results := []float64{}
 
+	resultChannel := make(chan float64, len(itemCodes))
+	resultErrorsChannel := make(chan error)
+
+	waitGroup := sync.WaitGroup{}
+
 	for _, itemCode := range itemCodes {
-		// TODO: parallelize this, it can be optimized to not make the calls to the external service sequentially
-		price, err := c.GetPriceFor(itemCode)
-		if err != nil {
-			return []float64{}, err
-		}
-		results = append(results, price)
+		waitGroup.Add(1)
+		go func(itemCode string, resultsChannel chan float64, resultErrorsChannel chan error, waitGroup *sync.WaitGroup) {
+			price, err := c.GetPriceFor(itemCode)
+			if err != nil {
+				resultErrorsChannel <- err
+			}
+			resultsChannel <- price
+			waitGroup.Done()
+		}(itemCode, resultChannel, resultErrorsChannel, &waitGroup)
 	}
+	waitGroup.Wait()
+
 	return results, nil
 }
