@@ -2,6 +2,7 @@ package sample1
 
 import (
 	"fmt"
+	"sync"
 	"time"
 )
 
@@ -18,6 +19,7 @@ type TransparentCache struct {
 	actualPriceService PriceService
 	maxAge             time.Duration
 	prices             map[string]CachedPrice
+	mutex              sync.RWMutex
 }
 
 type CachedPrice struct {
@@ -29,8 +31,22 @@ func NewTransparentCache(actualPriceService PriceService, maxAge time.Duration) 
 	return &TransparentCache{
 		actualPriceService: actualPriceService,
 		maxAge:             maxAge,
-		prices:             map[string]CachedPrice{},
+		prices:             make(map[string]CachedPrice),
+		mutex:              sync.RWMutex{},
 	}
+}
+
+func (c *TransparentCache) readFromCache(itemCode string) (CachedPrice, bool) {
+	c.mutex.RLock()
+	defer c.mutex.RUnlock()
+	cachedPrice, ok := c.prices[itemCode]
+	return cachedPrice, ok
+}
+
+func (c *TransparentCache) writeToCache(itemCode string, cachedPrice CachedPrice) {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+	c.prices[itemCode] = cachedPrice
 }
 
 func (c *TransparentCache) isCachedPriceExpired(cachedPrice CachedPrice) bool {
@@ -39,7 +55,7 @@ func (c *TransparentCache) isCachedPriceExpired(cachedPrice CachedPrice) bool {
 
 // GetPriceFor gets the price for the item, either from the cache or the actual service if it was not cached or too old
 func (c *TransparentCache) GetPriceFor(itemCode string) (float64, error) {
-	cachedPrice, ok := c.prices[itemCode]
+	cachedPrice, ok := c.readFromCache(itemCode)
 	if ok && !c.isCachedPriceExpired(cachedPrice) {
 		return cachedPrice.price, nil
 	}
@@ -47,10 +63,11 @@ func (c *TransparentCache) GetPriceFor(itemCode string) (float64, error) {
 	if err != nil {
 		return 0, fmt.Errorf("getting price from service : %v", err.Error())
 	}
-	c.prices[itemCode] = CachedPrice{
+	newCachedPrice := CachedPrice{
 		price:   price,
 		savedAt: time.Now(),
 	}
+	c.writeToCache(itemCode, newCachedPrice)
 	return price, nil
 }
 
@@ -58,6 +75,7 @@ func (c *TransparentCache) GetPriceFor(itemCode string) (float64, error) {
 // If any of the operations returns an error, it should return an error as well
 func (c *TransparentCache) GetPricesFor(itemCodes ...string) ([]float64, error) {
 	results := []float64{}
+
 	for _, itemCode := range itemCodes {
 		// TODO: parallelize this, it can be optimized to not make the calls to the external service sequentially
 		price, err := c.GetPriceFor(itemCode)
