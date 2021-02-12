@@ -42,7 +42,7 @@ Please email your solution as soon as you have completed the challenge or the ti
 # Thinking process :
 * Started by reading the problem and getting to know the problem and the given partial-solution: 15-20 minutes.
 
-* Commit #4860600: First I started looking for a way to have the cache price creation time somewhere and the best way I found was to use a struct that contained the price along with every extra fields that I needed, in this case only the creation time.
+* Commit https://github.com/PecchioLucas/Golang-Challenge/commit/4860600458897b648dc398e829b6fb3fe64ff995: First I started looking for a way to have the cache price creation time somewhere and the best way I found was to use a struct that contained the price along with every extra fields that I needed, in this case only the creation time.
 
 Now that I had this struct I needed to add the check if the element was expired or not. For that I had 2 options, one was to add a method for TransparentCache the other was to add a method for CachedPrice new struct. I didn't know what kind of problems I was going to face when starting to write down the parallelization of the routines so I wrote it as a method of TransparentCache just to be sure that if I needed to change the behaviour I had all the information that the TransparentCache has. Now I think it's better as a method of CachedPrice: isExpired(maxAge). 
 
