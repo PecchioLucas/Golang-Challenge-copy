@@ -76,23 +76,28 @@ func (c *TransparentCache) GetPriceFor(itemCode string) (float64, error) {
 // GetPricesFor gets the prices for several items at once, some might be found in the cache, others might not
 // If any of the operations returns an error, it should return an error as well
 func (c *TransparentCache) GetPricesFor(itemCodes ...string) ([]float64, error) {
+	type priceResult struct {
+		itemCode string
+		price    float64
+		err      error
+	}
+
 	results := []float64{}
 
-	resultChannel := make(chan float64, len(itemCodes))
-	resultErrorsChannel := make(chan error)
+	resultChannel := make(chan priceResult, len(itemCodes))
 
 	waitGroup := sync.WaitGroup{}
-
 	for _, itemCode := range itemCodes {
 		waitGroup.Add(1)
-		go func(itemCode string, resultsChannel chan float64, resultErrorsChannel chan error, waitGroup *sync.WaitGroup) {
+		go func(itemCode string, resultsChannel chan priceResult, waitGroup *sync.WaitGroup) {
 			price, err := c.GetPriceFor(itemCode)
-			if err != nil {
-				resultErrorsChannel <- err
+			resultsChannel <- priceResult{
+				itemCode: itemCode,
+				price:    price,
+				err:      err,
 			}
-			resultsChannel <- price
 			waitGroup.Done()
-		}(itemCode, resultChannel, resultErrorsChannel, &waitGroup)
+		}(itemCode, resultChannel, &waitGroup)
 	}
 	waitGroup.Wait()
 
